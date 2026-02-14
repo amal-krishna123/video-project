@@ -2,6 +2,8 @@ import React, { useRef, useState, useEffect } from "react";
 import Upload from "./Upload";
 import VideoPlayer from "./VideoPlayer"; 
 import "./App.css"; // Import our new styles
+// Use the environment variable, or fallback to localhost for development
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
 // --- Simple Gallery Component ---
 const VideoGallery = ({ videos, onSelect }) => {
@@ -35,7 +37,7 @@ export default function App() {
 
   const fetchVideos = async () => {
     try {
-      const res = await fetch("http://localhost:3000/videos");
+      const res = await fetch(`${BACKEND_URL}/videos`);
       const data = await res.json();
       setVideos(data);
     } catch (err) {

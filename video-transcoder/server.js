@@ -15,7 +15,7 @@ const redisOptions = redisUrl.startsWith('redis://')
     : { connection: { host: '127.0.0.1', port: 6379 } }; // Local
 
 const app = express();
-app.use(cors()); // Allow frontend to connect
+app.use(cors()); // Allow all origins
 
 // 1. Create HTTP Server & Socket.io
 const server = http.createServer(app);

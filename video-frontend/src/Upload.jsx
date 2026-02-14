@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:3000'); // Connect to Backend
+
+// Use the environment variable, or fallback to localhost for development
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const socket = io(BACKEND_URL); // Connect to Backend
 
 export default function Upload({ onUploadSuccess }) {
     const [file, setFile] = useState(null);
@@ -17,7 +20,7 @@ export default function Upload({ onUploadSuccess }) {
         formData.append("video", file);
 
         // 1. Upload File
-        const response = await fetch('http://localhost:3000/upload', {
+        const response = await fetch(`${BACKEND_URL}/upload`, {
             method: 'POST',
             body: formData
         });
