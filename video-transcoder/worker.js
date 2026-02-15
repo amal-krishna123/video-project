@@ -5,9 +5,31 @@ const fs = require('fs');
 const path = require('path');
 const { downloadFromS3, uploadToS3 } = require('./s3Client');
 const redisUrl = process.env.REDIS_URL || '127.0.0.1';
-const redisOptions = redisUrl.startsWith('redis://') 
+/*const redisOptions = redisUrl.startsWith('redis://') 
     ? { connection: { url: redisUrl } } 
     : { connection: { host: '127.0.0.1', port: 6379 } };
+*/
+let connectionConfig;
+
+if (process.env.REDIS_URL) {
+  // --- CLOUD CONFIGURATION (Render) ---
+  const url = new URL(process.env.REDIS_URL);
+  connectionConfig = {
+    host: url.hostname,
+    port: Number(url.port),
+    password: url.password,
+    username: url.username,
+    tls: { rejectUnauthorized: false } // Required for secure Cloud Redis
+  };
+  console.log("Worker connecting to Cloud Redis...");
+} else {
+  // --- LOCAL CONFIGURATION (Laptop) ---
+  connectionConfig = {
+    host: '127.0.0.1',
+    port: 6379
+  };
+  console.log("Worker connecting to Local Redis...");
+}
 
 // Set ffmpeg path from environment or default
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
@@ -135,4 +157,4 @@ const worker = new Worker('video-transcoding', async (job) => {
         if (fs.existsSync(localOutputDir)) fs.rmSync(localOutputDir, { recursive: true, force: true });
     }
 
-}, { redisOptions });
+}, { connection: connectionConfig });
