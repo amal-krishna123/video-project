@@ -10,6 +10,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { listVideos } = require('./s3Client');
 const redisUrl = process.env.REDIS_URL;
+require('./worker');
 
 if (!redisUrl && process.env.NODE_ENV === 'production') {
     console.warn('⚠️ WARNING: REDIS_URL not set in production environment!');
