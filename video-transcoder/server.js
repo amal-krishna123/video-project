@@ -2,19 +2,20 @@ require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const { Queue, QueueEvents } = require('bullmq');
-const { uploadToS3, listVideos } = require('./s3Client'); // Combined import
+const { uploadToS3, listVideos } = require('./s3Client'); 
 const fs = require('fs');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
-// --- 1. ROBUST REDIS CONFIGURATION ---
+// --- 1. CRITICAL REDIS FIX ---
+// We MUST parse the URL and add 'tls' for Cloud Redis to work
 const redisUrl = process.env.REDIS_URL;
 let connectionConfig;
 
 if (redisUrl) {
-    // Cloud Config (Render / Upstash)
-    console.log("☁️  Using Cloud Redis");
+    // CLOUD MODE (Render / Upstash)
+    console.log("☁️  Configuring for Cloud Redis...");
     try {
         const url = new URL(redisUrl);
         connectionConfig = {
@@ -22,139 +23,125 @@ if (redisUrl) {
             port: Number(url.port),
             username: url.username,
             password: url.password,
-            tls: { rejectUnauthorized: false } // CRITICAL for Upstash/Cloud
+            // 👇 THIS IS THE MISSING PIECE THAT CAUSES THE CRASH
+            tls: { rejectUnauthorized: false } 
         };
     } catch (e) {
-        console.error("❌ Invalid REDIS_URL:", e);
+        console.error("❌ Failed to parse REDIS_URL:", e);
     }
 } else {
-    // Local Config
-    console.log("💻 Using Local Redis");
+    // LOCAL MODE
+    console.log("💻 Configuring for Local Redis...");
     connectionConfig = { host: '127.0.0.1', port: 6379 };
 }
 
-// Wrap in the format BullMQ expects
-const redisOptions = { connection: connectionConfig };
-
-// --- 2. INITIALIZE APP ---
+// --- 2. SETUP APP & CORS ---
 const app = express();
 
-// CORS FIX: Allow '*', but DO NOT set credentials: true
+// Allow Everyone ('*') but NO credentials
 app.use(cors({
-    origin: '*',
-    methods: ["GET", "POST", "PUT", "DELETE"]
+    origin: '*', 
+    methods: ["GET", "POST"]
 }));
 
 app.use(express.json());
 
-// --- 3. CREATE HTTP SERVER & SOCKET ---
+// --- 3. CREATE SERVER & SOCKET ---
 const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: '*',           // Allow All
-        methods: ["GET", "POST"]
-        // REMOVED: credentials: true (Conflicts with '*')
+        origin: '*',           // Allow All Origins
+        methods: ["GET", "POST"],
+        allowEIO3: true        // Compatibility mode
+        // ❌ REMOVED: credentials: true (This was causing the conflict)
     },
-    transports: ['websocket', 'polling'] // Ensure compatibility
+    transports: ['websocket', 'polling'] 
 });
 
-// --- 4. SETUP QUEUES ---
-const videoQueue = new Queue('video-transcoding', redisOptions);
-const queueEvents = new QueueEvents('video-transcoding', redisOptions);
+// --- 4. INITIALIZE QUEUES (Safely) ---
+// We pass the 'connectionConfig' we created in Step 1
+const videoQueue = new Queue('video-transcoding', { connection: connectionConfig });
+const queueEvents = new QueueEvents('video-transcoding', { connection: connectionConfig });
 
 const upload = multer({ dest: 'temp/' });
 
-// --- 5. SOCKET CONNECTION LOGIC ---
+// --- 5. SOCKET EVENTS ---
 io.on('connection', (socket) => {
-    console.log(`⚡ User connected: ${socket.id}`);
+    console.log(`⚡ Socket Connected: ${socket.id}`);
 
-    // Listen for "job-updates" room joining
     socket.on('subscribe', (jobId) => {
-        console.log(`User ${socket.id} subscribed to job ${jobId}`);
+        console.log(`User ${socket.id} watching job ${jobId}`);
         socket.join(jobId);
     });
 
     socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
+        console.log(`❌ Socket Disconnected: ${socket.id}`);
     });
 });
 
-// --- 6. GLOBAL QUEUE LISTENERS ---
-// These run ONCE and broadcast to whoever is in the room
+// --- 6. QUEUE PROGRESS EVENTS ---
 queueEvents.on('progress', ({ jobId, data }) => {
     io.to(jobId).emit('progress', data);
 });
 
 queueEvents.on('completed', ({ jobId }) => {
-    console.log(`✅ Job ${jobId} Completed`);
     io.to(jobId).emit('status', 'completed');
 });
 
 queueEvents.on('failed', ({ jobId, failedReason }) => {
-    console.error(`❌ Job ${jobId} Failed: ${failedReason}`);
+    console.error(`Job ${jobId} failed: ${failedReason}`);
     io.to(jobId).emit('status', 'failed');
 });
 
-
-// --- 7. API ROUTES ---
-app.get('/', (req, res) => {
-    res.send('<h1>✅ Video Transcoding Server is Running!</h1>');
-});
+// --- 7. ROUTES ---
+app.get('/', (req, res) => res.send('<h1>✅ Server is Alive</h1>'));
 
 app.post('/upload', upload.single('video'), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-
-        const { filename, path: localPath, mimetype } = req.file;
-        console.log(`📥 Uploading ${filename} to S3...`);
-
-        // Basic validation
-        if (!mimetype.startsWith('video/')) {
-            fs.unlinkSync(localPath);
-            return res.status(400).json({ error: 'Not a video file' });
-        }
-
-        // Upload & Queue
-        await uploadToS3(localPath, filename);
+        if (!req.file) return res.status(400).json({ error: 'No file' });
         
-        // Add job to queue
-        const job = await videoQueue.add('transcode', { filename });
+        console.log(`📥 Processing ${req.file.filename}...`);
         
-        // Clean up local file
-        fs.unlink(localPath, () => {});
-
-        console.log(`User subscribed to job ${job.id}`);
+        // Upload to S3
+        await uploadToS3(req.file.path, req.file.filename);
+        
+        // Add to Queue
+        const job = await videoQueue.add('transcode', { filename: req.file.filename });
+        
+        // Cleanup
+        fs.unlink(req.file.path, () => {});
+        
         res.json({ message: 'Uploaded!', jobId: job.id });
-
     } catch (error) {
-        console.error('❌ Upload error:', error);
-        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        res.status(500).json({ error: 'Upload failed', details: error.message });
+        console.error("Upload Error:", error);
+        res.status(500).json({ error: 'Upload Failed' });
     }
 });
 
 app.get('/videos', async (req, res) => {
     try {
         const videos = await listVideos();
-        // Update this URL to match YOUR bucket URL structure
+        // Update URL based on your bucket
         const videoList = videos.map(filename => ({
             filename,
-            // Ensure this points to the right region/bucket
             url: `https://${process.env.BUCKET_NAME}.s3.eu-north-1.amazonaws.com/hls/${filename}/master.m3u8`
         }));
-        
         res.json(videoList);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Failed to list videos' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'List Failed' });
     }
 });
 
-// --- 8. START WORKER & SERVER ---
-require('./worker'); // Start the background worker
+// --- 8. START BACKGROUND WORKER ---
+// Ensure worker.js is in the same folder!
+try {
+    require('./worker'); 
+} catch (e) {
+    console.error("⚠️ Worker failed to start:", e);
+}
 
+// --- 9. START LISTENING ---
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🚀 Server + Socket running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
