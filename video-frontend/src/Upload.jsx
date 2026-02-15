@@ -3,7 +3,14 @@ import io from 'socket.io-client';
 
 // Use the environment variable, or fallback to localhost for development
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
-const socket = io(BACKEND_URL); // Connect to Backend
+const socket = io(BACKEND_URL, {
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 5,
+    transports: ['websocket', 'polling'],
+    withCredentials: true
+}); // Connect to Backend
 
 // Utility function to format bytes
 const formatBytes = (bytes) => {

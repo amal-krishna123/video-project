@@ -22,18 +22,32 @@ const redisOptions = redisUrl
     : { connection: { host: '127.0.0.1', port: 6379 } }; // Local fallback (development only)
 
 const app = express();
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.FRONTEND_URL || 'https://video-project-f96jdie06-amals-projects-df88c284.vercel.app'
+];
+
 app.use(cors({
-  origin: "*", // Allow ALL origins (easiest for deployment)
-  methods: ["GET", "POST"],
-  credentials: true
-})); // Allow all origins
+    origin: function(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('CORS not allowed'));
+        }
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+}));
 
 // 1. Create HTTP Server & Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow React Frontend
-        methods: ["GET", "POST"]
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true,
+        allowEIO3: true
     }
 });
 
