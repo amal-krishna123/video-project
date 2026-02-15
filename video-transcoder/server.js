@@ -21,13 +21,17 @@ const redisOptions = redisUrl
     : { connection: { host: '127.0.0.1', port: 6379 } }; // Local fallback (development only)
 
 const app = express();
-app.use(cors()); // Allow all origins
+app.use(cors({
+  origin: "*", // Allow ALL origins (easiest for deployment)
+  methods: ["GET", "POST"],
+  credentials: true
+})); // Allow all origins
 
 // 1. Create HTTP Server & Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173", // Allow React Frontend
+        origin: "*", // Allow React Frontend
         methods: ["GET", "POST"]
     }
 });
