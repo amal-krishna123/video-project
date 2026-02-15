@@ -45,7 +45,6 @@ io.on('connection', (socket) => {
 
 // 4. Listen for Queue Events (Global)
 // When a job progresses, tell the specific roomREDIS_HOST, port: REDIS_PORT
-const { QueueEvents } = require('bullmq');
 
 queueEvents.on('progress', ({ jobId, data }) => {
     // "data" is the percentage (e.g., 50)
