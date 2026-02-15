@@ -9,10 +9,16 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { listVideos } = require('./s3Client');
-const redisUrl = process.env.REDIS_URL || '127.0.0.1'; // Use Env Var if available
-const redisOptions = redisUrl.startsWith('redis://') 
-    ? { connection: { url: redisUrl } }  // Cloud (Upstash)
-    : { connection: { host: '127.0.0.1', port: 6379 } }; // Local
+const redisUrl = process.env.REDIS_URL;
+
+if (!redisUrl && process.env.NODE_ENV === 'production') {
+    console.warn('⚠️ WARNING: REDIS_URL not set in production environment!');
+    console.warn('Please set REDIS_URL environment variable on Render dashboard');
+}
+
+const redisOptions = redisUrl
+    ? { connection: { url: redisUrl } }  // Cloud (Upstash or similar)
+    : { connection: { host: '127.0.0.1', port: 6379 } }; // Local fallback (development only)
 
 const app = express();
 app.use(cors()); // Allow all origins
