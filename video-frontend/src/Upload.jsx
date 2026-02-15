@@ -9,7 +9,6 @@ const socket = io(BACKEND_URL, {
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 5,
     transports: ['websocket', 'polling'],
-    withCredentials: true
 }); // Connect to Backend
 
 // Utility function to format bytes
