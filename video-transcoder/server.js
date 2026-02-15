@@ -136,11 +136,11 @@ app.get('/videos', async (req, res) => {
 
 // --- 8. START BACKGROUND WORKER ---
 // Ensure worker.js is in the same folder!
-try {
-    require('./worker'); 
-} catch (e) {
-    console.error("⚠️ Worker failed to start:", e);
-}
+// try {
+//     require('./worker'); 
+// } catch (e) {
+//     console.error("⚠️ Worker failed to start:", e);
+// }
 
 // --- 9. START LISTENING ---
 const PORT = process.env.PORT || 3000;
