@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
-const { Queue } = require('bullmq');
+const { Queue,QueueEvents } = require('bullmq');
 const { uploadToS3 } = require('./s3Client');
 const fs = require('fs');
 const path = require('path');
