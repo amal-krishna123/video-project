@@ -1,0 +1,19 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Video {
+  id           String   @id @default(uuid())
+  filename     String   @unique
+  originalName String
+  status       String   @default("processing") // 'processing', 'ready', 'failed'
+  thumbnailUrl String?
+  duration     Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

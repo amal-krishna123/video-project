@@ -12,6 +12,8 @@
   "type": "commonjs",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.984.0",
+    "@aws-sdk/cloudfront-signer": "^3.1005.0",
+    "@prisma/client": "^5.0.0",
     "bullmq": "^5.67.3",
     "cors": "^2.8.6",
     "dotenv": "^16.0.3",
@@ -19,6 +21,7 @@
     "fluent-ffmpeg": "^2.1.3",
     "ioredis": "^5.9.2",
     "multer": "^2.0.2",
+    "prisma": "^5.0.0",
     "socket.io": "^4.8.3"
   }
 }

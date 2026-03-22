@@ -6,7 +6,7 @@ import "./App.css"; // Import our new styles
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
 // --- Simple Gallery Component ---
-const VideoGallery = ({ videos, onSelect }) => {
+const VideoGallery = ({ videos, onSelect, onEdit, onDelete }) => {
   return (
     <div>
       <h3 style={{ color: "#fff", marginBottom: "20px" }}>Your Library</h3>
@@ -15,11 +15,40 @@ const VideoGallery = ({ videos, onSelect }) => {
       ) : (
         <div className="gallery-grid">
           {videos.map((v) => (
-            <div key={v.filename} className="video-card" onClick={() => onSelect(v.url)}>
-              <div className="thumbnail-placeholder">🎬</div>
-              <div className="video-info">
-                <h4 className="video-title">{v.filename}</h4>
-                <p className="video-meta">HLS Stream • 1080p</p>
+            <div 
+                key={v.id} 
+                className="video-card" 
+                onClick={() => v.status === 'ready' && onSelect(v.url)}
+                style={{ opacity: v.status === 'ready' ? 1 : 0.6, cursor: v.status === 'ready' ? 'pointer' : 'not-allowed' }}
+            >
+              <div className="thumbnail-placeholder" style={{ padding: 0, overflow: 'hidden' }}>
+                {v.thumbnailUrl ? (
+                    <img src={v.thumbnailUrl} alt="Thumbnail" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                    <span style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        {v.status === 'processing' ? '⏳ Processing...' : v.status === 'failed' ? '❌ Failed' : '🎬'}
+                    </span>
+                )}
+              </div>
+              <div className="video-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                    <h4 className="video-title">{v.originalName || v.filename}</h4>
+                    <p className="video-meta">
+                    {v.status === 'ready' ? 'HLS Stream • Multi-Bitrate' : `Status: ${v.status}`}
+                    </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                        title="Edit Name"
+                        onClick={(e) => { e.stopPropagation(); onEdit(v.id, v.originalName || v.filename); }} 
+                        style={{ background: 'transparent', border: 'none', color: '#bb86fc', cursor: 'pointer', padding: '4px', fontSize: '18px' }}
+                    >✏️</button>
+                    <button 
+                        title="Delete Video"
+                        onClick={(e) => { e.stopPropagation(); onDelete(v.id); }} 
+                        style={{ background: 'transparent', border: 'none', color: '#ff5252', cursor: 'pointer', padding: '4px', fontSize: '18px' }}
+                    >🗑️</button>
+                </div>
               </div>
             </div>
           ))}
@@ -49,6 +78,37 @@ export default function App() {
     fetchVideos();
   }, []);
 
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this video? This action cannot be undone.")) return;
+    try {
+      await fetch(`${BACKEND_URL}/videos/${id}`, { method: 'DELETE' });
+      fetchVideos();
+      // If the deleted video is currently playing, stop it
+      if (videoLink && videos.find(v => v.id === id)?.url === videoLink) {
+         setVideoLink(null);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete video");
+    }
+  };
+
+  const handleEdit = async (id, currentName) => {
+    const newName = window.prompt("Enter new video name:", currentName);
+    if (!newName || newName === currentName) return;
+    try {
+      await fetch(`${BACKEND_URL}/videos/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalName: newName })
+      });
+      fetchVideos();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to update video name");
+    }
+  };
+
   const videoJsOptions = {
     autoplay: true,
     controls: true,
@@ -64,7 +124,7 @@ export default function App() {
   return (
     <div className="container">
       <div className="header">
-        <h1>StreamCloud</h1>
+        <h1>EasyStream</h1>
         <p>Adaptive Bitrate Video Streaming</p>
       </div>
 
@@ -93,7 +153,7 @@ export default function App() {
       </div>
 
       {/* Gallery Section */}
-      <VideoGallery videos={videos} onSelect={setVideoLink} />
+      <VideoGallery videos={videos} onSelect={setVideoLink} onDelete={handleDelete} onEdit={handleEdit} />
     </div>
   );
 }

@@ -6,3 +6,5 @@ output/
 .DS_Store
 *.log
 npm-debug.log*
+
+/generated/prisma

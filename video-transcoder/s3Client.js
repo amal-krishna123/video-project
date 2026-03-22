@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const fs = require('fs');
 const { ListObjectsV2Command } = require('@aws-sdk/client-s3');
 require('dotenv').config();
@@ -20,12 +20,21 @@ async function uploadToS3(filePath, fileName, folder = 'uploads') {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
             // Must create a NEW stream for every attempt
+            const ext = filePath.split('.').pop().toLowerCase();
+            let contentType = 'application/octet-stream'; // default
+            if (ext === 'm3u8') contentType = 'application/x-mpegURL';
+            else if (ext === 'ts') contentType = 'video/MP2T';
+            else if (ext === 'mp4') contentType = 'video/mp4';
+            else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+            else if (ext === 'png') contentType = 'image/png';
+
             const fileStream = fs.createReadStream(filePath);
             
             const command = new PutObjectCommand({
                 Bucket: BUCKET_NAME,
                 Key: `${folder}/${fileName}`,
-                Body: fileStream
+                Body: fileStream,
+                ContentType: contentType
             });
             
             await s3Client.send(command);
@@ -91,4 +100,44 @@ async function listVideos() {
     return Array.from(videos);
 }
 
-module.exports = { uploadToS3, downloadFromS3, listVideos };
+
+async function deleteVideoFromS3(fileName) {
+    try {
+        // 1. Delete original upload
+        const deleteOriginalCommand = new DeleteObjectsCommand({
+            Bucket: BUCKET_NAME,
+            Delete: { Objects: [{ Key: `uploads/${fileName}` }] }
+        });
+        await s3Client.send(deleteOriginalCommand).catch(e => console.warn("Could not delete original upload", e));
+
+        // 2. Delete all HLS files
+        let isTruncated = true;
+        let continuationToken = undefined;
+
+        while (isTruncated) {
+            const listCommand = new ListObjectsV2Command({
+                Bucket: BUCKET_NAME,
+                Prefix: `hls/${fileName}/`,
+                ContinuationToken: continuationToken
+            });
+            const listResponse = await s3Client.send(listCommand);
+
+            if (listResponse.Contents && listResponse.Contents.length > 0) {
+                const objectsToDelete = listResponse.Contents.map(obj => ({ Key: obj.Key }));
+                const deleteHlsCommand = new DeleteObjectsCommand({
+                    Bucket: BUCKET_NAME,
+                    Delete: { Objects: objectsToDelete }
+                });
+                await s3Client.send(deleteHlsCommand);
+            }
+            isTruncated = listResponse.IsTruncated;
+            continuationToken = listResponse.NextContinuationToken;
+        }
+        console.log(`🗑️ Deleted S3 artifacts for ${fileName}`);
+    } catch (error) {
+        console.error(`Error deleting ${fileName} from S3:`, error);
+        throw error;
+    }
+}
+
+module.exports = { uploadToS3, downloadFromS3, listVideos, deleteVideoFromS3 };
